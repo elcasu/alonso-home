@@ -1,0 +1,27 @@
+#pragma once
+
+#ifndef WIFI_SSID
+#define WIFI_SSID "alonso-home"
+#endif
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD "alonso-home-wifi"
+#endif
+#ifndef MQTT_HOST
+#define MQTT_HOST "192.168.4.1"
+#endif
+#ifndef MQTT_PORT
+#define MQTT_PORT 1883
+#endif
+#ifndef MQTT_USER
+#define MQTT_USER "alonso"
+#endif
+#ifndef MQTT_PASSWORD
+#define MQTT_PASSWORD "alonso"
+#endif
+#ifndef DEVICE_ID
+#define DEVICE_ID "esp-bathroom"
+#endif
+
+#define RELAY_COUNT 1
+const int RELAY_PINS[RELAY_COUNT] = {26};
+#define RELAY_ACTIVE_LOW 1

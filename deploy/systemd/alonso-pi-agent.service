@@ -1,0 +1,21 @@
+[Unit]
+Description=Alonso Home occupancy agent
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/alonso-home/apps/pi-agent
+EnvironmentFile=-/opt/alonso-home/apps/pi-agent/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+WatchdogSec=30
+WatchdogSignal=SIGTERM
+User=pi
+Group=gpio
+SupplementaryGroups=dialout
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

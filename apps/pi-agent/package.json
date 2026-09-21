@@ -1,0 +1,27 @@
+{
+  "name": "@alonso/pi-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "tsx --test src/*.test.ts",
+    "gpio-test": "tsx src/gpio-test.ts"
+  },
+  "dependencies": {
+    "@alonso/shared": "workspace:*",
+    "better-sqlite3": "^11.8.1",
+    "mqtt": "^5.10.3"
+  },
+  "optionalDependencies": {
+    "onoff": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.17.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "recommendations": ["platformio.platformio-ide", "llvm-vs-code-extensions.vscode-clangd"]
+}

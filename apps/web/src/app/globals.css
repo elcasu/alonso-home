@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-ink-950 text-stone-100 antialiased min-h-screen;
+}
+
+.lamp-on {
+  box-shadow: 0 0 0 1px rgba(243, 199, 122, 0.35), 0 12px 40px rgba(243, 199, 122, 0.12);
+}

@@ -1,0 +1,21 @@
+# Apple clangd no puede parsear el SDK Xtensa (asm, secciones ELF, libstdc++).
+# El firmware se valida con `pio run`, no con el linter del Mac.
+CompileFlags:
+  Add:
+    - --target=i386-unknown-linux-gnu
+    - -ferror-limit=0
+    - -Wno-unknown-warning-option
+    - -Wno-unused-command-line-argument
+  Remove:
+    - -mlongcalls
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+    - -fno-jump-tables
+    - -freorder-blocks
+    - -MMD
+    - -fstack-protector
+    - -ffunction-sections
+    - -fdata-sections
+Diagnostics:
+  Suppress:
+    - "*"

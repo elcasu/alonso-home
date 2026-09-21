@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: alonso
+      POSTGRES_PASSWORD: alonso
+      POSTGRES_DB: alonso
+    ports:
+      - "5432:5432"
+    volumes:
+      - alonso_pg:/var/lib/postgresql/data
+
+volumes:
+  alonso_pg:

@@ -1,0 +1,13 @@
+{
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/apps/esp32",
+    "--header-insertion=never"
+  ],
+  "files.associations": {
+    "Arduino.h": "cpp",
+    "WiFi.h": "cpp",
+    "PubSubClient.h": "cpp"
+  },
+  "C_Cpp.default.configurationProvider": "platformio.platformio-ide",
+  "C_Cpp.errorSquiggles": "disabledIfIncludesResolve"
+}
