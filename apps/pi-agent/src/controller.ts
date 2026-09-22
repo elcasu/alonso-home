@@ -13,12 +13,14 @@ export class ZoneController {
     private store: AgentStore,
     private mqtt: MqttBridge,
     private gpioMock: boolean,
+    private gpioActiveLow = true,
   ) {}
 
   async init(): Promise<void> {
     for (const zone of this.store.getZones()) {
       if (zone.kind === "gpio" && zone.pin !== undefined) {
-        const handle = await openGpio(zone.pin, zone.activeLow !== false, this.gpioMock);
+        const activeLow = this.gpioActiveLow && zone.activeLow !== false;
+        const handle = await openGpio(zone.pin, activeLow, this.gpioMock);
         this.gpios.set(zone.id, handle);
       }
     }

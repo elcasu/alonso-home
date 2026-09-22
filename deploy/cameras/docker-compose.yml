@@ -1,0 +1,49 @@
+# NVR de las GeoTek GT-N3. Aislado de la Pi de luces y del Postgres del panel.
+name: alonso-cameras
+
+services:
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:0.16.2
+    restart: unless-stopped
+    shm_size: 256mb
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+    ports:
+      - "${FRIGATE_UI_PORT:-8971}:8971"
+      - "8554:8554"
+    volumes:
+      - frigate_config:/config
+      - ./config/config.yml:/config/config.yml
+      - frigate_storage:/media/frigate
+    tmpfs:
+      - /tmp/cache
+    networks:
+      - cameras
+
+  uploader:
+    build: ./uploader
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      FRIGATE_URL: http://frigate:5000
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+    volumes:
+      - uploader_state:/data
+      - ./data/s3-dry:/dry
+      - ${HOME}/.aws:/root/.aws:ro
+    depends_on:
+      - frigate
+    networks:
+      - cameras
+
+networks:
+  cameras:
+    driver: bridge
+
+volumes:
+  frigate_storage:
+  frigate_config:
+  uploader_state:

@@ -15,6 +15,8 @@ export type AgentConfig = {
   cloudUrl: string;
   deviceToken: string;
   gpioMock: boolean;
+  /** Relé típico = true. LED GPIO→GND = false. */
+  gpioActiveLow: boolean;
   mqttEnabled: boolean;
   mqttUrl: string;
   mqttUser: string;
@@ -36,6 +38,7 @@ export function loadConfig(cwd = process.cwd()): AgentConfig {
     cloudUrl: env("CLOUD_URL").replace(/\/$/, ""),
     deviceToken: env("DEVICE_TOKEN"),
     gpioMock,
+    gpioActiveLow: envFlag("GPIO_ACTIVE_LOW", true),
     mqttEnabled: envFlag("MQTT_ENABLED", false),
     mqttUrl: env("MQTT_URL", "mqtt://127.0.0.1:1883"),
     mqttUser: env("MQTT_USER", "alonso"),

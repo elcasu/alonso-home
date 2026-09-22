@@ -11,7 +11,9 @@ import { createSyncLoop } from "./sync.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   process.env.TZ = config.timezone;
-  log(`Alonso Home agent TZ=${config.timezone} mock=${config.gpioMock}`);
+  log(
+    `Alonso Home agent TZ=${config.timezone} mock=${config.gpioMock} activeLow=${config.gpioActiveLow}`,
+  );
 
   const store = openStore(config.dbPath);
   const mqtt = connectMqtt({
@@ -20,7 +22,7 @@ async function main(): Promise<void> {
     username: config.mqttUser,
     password: config.mqttPassword,
   });
-  const controller = new ZoneController(store, mqtt, config.gpioMock);
+  const controller = new ZoneController(store, mqtt, config.gpioMock, config.gpioActiveLow);
   await controller.init();
 
   const scheduler = createScheduler(store, controller, config.schedulerIntervalMs);

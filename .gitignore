@@ -18,3 +18,6 @@ apps/web/.vercel
 .vercel
 .pnpm-store
 .vscode/c_cpp_properties.json
+deploy/cameras/.env
+deploy/cameras/data
+deploy/cameras/config/config.yml

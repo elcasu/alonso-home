@@ -12,6 +12,7 @@ Casa prefabricada vacía: las luces se encienden y apagan solas para que desde a
 | [`apps/esp32`](apps/esp32) | Firmware MQTT para relés lejanos |
 | [`scripts/pi`](scripts/pi) | Bootstrap OS, GPIO de prueba, 4G, AP WiFi, MQTT, install |
 | [`deploy`](deploy) | systemd (watchdog), hostapd, dnsmasq, Mosquitto, SQL |
+| [`deploy/cameras`](deploy/cameras) | Frigate + clips a S3 (aparte de la Pi de luces) |
 
 Agenda de ejemplo (hora Argentina, con jitter):
 
