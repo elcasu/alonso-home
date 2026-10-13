@@ -1,6 +1,6 @@
 # Home Assistant de alonso-home
 
-Stack local de desarrollo: Home Assistant (`:8124`) + Mosquitto (`:1883`). Es independiente del PoC de voz (`alonso-ha-poc`, `:8123`).
+Stack: Home Assistant (`:8124`) + MQTT. Es independiente del PoC de voz (`alonso-ha-poc`, `:8123`).
 
 ## Arranque
 
@@ -9,12 +9,29 @@ cd deploy/homeassistant
 ./up.sh
 ```
 
-`up.sh` genera las claves de MQTT en `.env`, crea los usuarios del broker, instala `tuya-local` y levanta los contenedores. Se puede volver a correr sin problema.
+`up.sh` genera las claves de MQTT en `.env`, prepara el broker, instala `tuya-local` y levanta los contenedores. Se puede volver a correr sin problema.
+
+### Modo MQTT
+
+| `MQTT_MODE` | Dónde | Broker |
+| --- | --- | --- |
+| `local` (default en Mac) | Dev | Contenedor Mosquitto del compose (`:1883`) |
+| `host` (default en la Pi si `mosquitto.service` está activo) | Casita | Mosquitto del sistema — un solo broker para ESP, `pi-agent` y HA |
+
+En la Pi no hace falta forzar nada si ya corriste `scripts/pi/setup-mosquitto.sh`: `up.sh` detecta el servicio y usa `host`.
 
 Primera vez en HA (`http://127.0.0.1:8124`):
 
 1. Crear el usuario.
-2. *Ajustes > Dispositivos y servicios > Agregar integración > MQTT*: host `mosquitto`, puerto `1883`, usuario `ha` y la clave `MQTT_HA_PASSWORD` del `.env`.
+2. *Ajustes > Dispositivos y servicios > Agregar integración > MQTT*:
+   - **Mac (`local`)**: host `mosquitto`, puerto `1883`, usuario `ha`, clave `MQTT_HA_PASSWORD` del `.env`.
+   - **Pi (`host`)**: host `host.docker.internal`, puerto `1883`, usuario `ha`, clave `MQTT_HA_PASSWORD` del `.env`.
+
+Si en la Pi HA no conecta al broker, re-aplicá listeners (incl. docker0):
+
+```bash
+sudo bash scripts/pi/setup-mosquitto.sh
+```
 
 ## Probar el `pi-agent` contra este HA
 
@@ -55,3 +72,5 @@ Las claves y los datos del dispositivo están en `secrets/devices.json` (ignorad
 ```bash
 docker compose down
 ```
+
+En la Pi, eso no apaga el Mosquitto del sistema (`systemctl` lo sigue gestionando).

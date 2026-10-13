@@ -1,8 +1,13 @@
-# Home Assistant + Mosquitto de alonso-home. Separado del PoC de voz (alonso-ha-poc, :8123).
+# Home Assistant (+ Mosquitto opcional) de alonso-home.
+# Separado del PoC de voz (alonso-ha-poc, :8123).
+#
+# Mosquitto del compose solo con profile local-mqtt (Mac/dev).
+# En la Pi: MQTT_MODE=host → broker del sistema, sin publicar :1883.
 name: alonso-home-ha
 
 services:
   mosquitto:
+    profiles: ["local-mqtt"]
     image: eclipse-mosquitto:2
     restart: unless-stopped
     ports:
@@ -17,12 +22,13 @@ services:
     restart: unless-stopped
     ports:
       - "${HA_PORT:-8124}:8123"
+    extra_hosts:
+      # Para que HA (bridge) alcance el Mosquitto del host en la Pi.
+      - "host.docker.internal:host-gateway"
     environment:
       TZ: ${TZ:-America/Argentina/Buenos_Aires}
     volumes:
       - ./ha-config:/config
-    depends_on:
-      - mosquitto
 
 volumes:
   mosquitto_data:

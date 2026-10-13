@@ -37,6 +37,16 @@ pnpm dev:web     # panel http://localhost:4074  contraseña: cambiame
 
 Sin `DATABASE_URL` el panel usa memoria (se pierde al reiniciar). Para Postgres local: `docker compose up -d` y en `.env.local` `DATABASE_URL=postgres://alonso:alonso@localhost:5432/alonso`.
 
+### Secretos (Infisical)
+
+Los `.env` no van a git. La fuente de verdad es Infisical (proyecto `alonso-home`, carpetas `/shared`, `/web`, `/pi-agent`, …). Setup y inventario: [`docs/secrets.md`](docs/secrets.md).
+
+```bash
+infisical login && infisical init
+./scripts/secrets/export-env.sh          # genera .env locales (dev)
+# o: infisical run --env=dev --path=/shared --path=/pi-agent -- pnpm --filter @alonso/pi-agent dev
+```
+
 ## Fase 0 — banco de pruebas (sin 220 V)
 
 En la Pi, Raspberry Pi OS Lite 64-bit, Node 20.
