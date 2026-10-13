@@ -4,6 +4,10 @@ import {
   defaultSchedule,
   DEFAULT_ZONES,
   newerIso,
+  type CameraEventKind,
+  type CameraEventMessage,
+  type CameraEventState,
+  type CameraStatusMessage,
   type Command,
   type RuleAction,
   type Schedule,
@@ -23,6 +27,21 @@ export type LogEvent = {
 export type HeartbeatRow = {
   lastSeen: string;
   mqttConnected: boolean | null;
+};
+
+export type CameraEventRow = {
+  id: string;
+  cameraId: string;
+  kind: CameraEventKind;
+  state: CameraEventState;
+  ts: string;
+  hasSnapshot: boolean;
+};
+
+export type CameraStatusRow = {
+  cameraId: string;
+  online: boolean;
+  lastSeen: string;
 };
 
 export type AppStatus = {
@@ -48,6 +67,14 @@ export type DataStore = {
   getHeartbeat(): Promise<HeartbeatRow | null>;
   addEvent(message: string, zoneId?: string | null): Promise<void>;
   recentEvents(limit?: number): Promise<LogEvent[]>;
+  /** Devuelve false si el evento ya existía (IoT entrega at-least-once). */
+  saveCameraEvent(message: CameraEventMessage): Promise<boolean>;
+  saveCameraStatus(message: CameraStatusMessage): Promise<void>;
+  recentCameraEvents(limit: number, cameraId?: string): Promise<CameraEventRow[]>;
+  /** El último evento con foto de cada cámara. */
+  latestSnapshotEvents(): Promise<CameraEventRow[]>;
+  getCameraSnapshot(eventId: string): Promise<{ mime: string; data: Buffer } | null>;
+  getCameraStatuses(): Promise<CameraStatusRow[]>;
 };
 
 export async function getStore(): Promise<DataStore> {

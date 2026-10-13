@@ -8,7 +8,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     redirect("/login");
   }
   return (
-    <div className="mx-auto min-h-screen w-full max-w-3xl px-4 pb-16 pt-6">
+    <div className="mx-auto min-h-screen w-full max-w-4xl px-4 pb-16 pt-6">
       <Nav />
       {children}
     </div>

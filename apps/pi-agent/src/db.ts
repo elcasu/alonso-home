@@ -44,8 +44,16 @@ export type AgentStore = {
   removePending(id: string): void;
   addEvent(message: string, zoneId?: string): void;
   recentEvents(limit?: number): { ts: string; message: string; zoneId: string | null }[];
+  outboxAdd(id: string, payload: string): void;
+  outboxPeek(limit: number): OutboxRow[];
+  outboxRemove(id: string): void;
+  outboxCount(): number;
+  /** Borra lo vencido y, si hay demasiado, lo más viejo. Devuelve cuántos eliminó. */
+  outboxPrune(maxAgeMs: number, maxRows: number): number;
   close(): void;
 };
+
+export type OutboxRow = { id: string; payload: string; createdAt: string };
 
 function rowToZone(row: ZoneRow): ZoneState {
   return {
@@ -95,6 +103,12 @@ export function openStore(dbPath: string): AgentStore {
       ts TEXT NOT NULL,
       message TEXT NOT NULL,
       zone_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS camera_outbox (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
   `);
 
@@ -210,6 +224,36 @@ export function openStore(dbPath: string): AgentStore {
           "SELECT ts, message, zone_id AS zoneId FROM events ORDER BY id DESC LIMIT ?",
         )
         .all(limit) as { ts: string; message: string; zoneId: string | null }[];
+    },
+    outboxAdd(id, payload) {
+      db.prepare(
+        "INSERT OR IGNORE INTO camera_outbox (id, payload, created_at) VALUES (?, ?, ?)",
+      ).run(id, payload, new Date().toISOString());
+    },
+    outboxPeek(limit) {
+      return db
+        .prepare(
+          "SELECT id, payload, created_at AS createdAt FROM camera_outbox ORDER BY seq LIMIT ?",
+        )
+        .all(limit) as OutboxRow[];
+    },
+    outboxRemove(id) {
+      db.prepare("DELETE FROM camera_outbox WHERE id = ?").run(id);
+    },
+    outboxCount() {
+      return (db.prepare("SELECT COUNT(*) AS n FROM camera_outbox").get() as { n: number }).n;
+    },
+    outboxPrune(maxAgeMs, maxRows) {
+      const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+      const old = db.prepare("DELETE FROM camera_outbox WHERE created_at < ?").run(cutoff).changes;
+      const extra = db
+        .prepare(
+          `DELETE FROM camera_outbox WHERE seq IN (
+             SELECT seq FROM camera_outbox ORDER BY seq DESC LIMIT -1 OFFSET ?
+           )`,
+        )
+        .run(maxRows).changes;
+      return old + extra;
     },
     close() {
       db.close();

@@ -7,7 +7,7 @@
     "build": "pnpm -r --if-present build",
     "dev:web": "pnpm --filter @alonso/web dev",
     "dev:pi": "pnpm --filter @alonso/pi-agent dev",
-    "test": "pnpm --filter @alonso/shared build && pnpm --filter @alonso/pi-agent test",
+    "test": "pnpm --filter @alonso/shared build && pnpm --filter @alonso/pi-agent test && pnpm --filter @alonso/web test",
     "lint": "pnpm -r --if-present lint",
     "postinstall": "pnpm --filter @alonso/shared build"
   },

@@ -1,5 +1,7 @@
 import path from "node:path";
+import { loadCamerasConfig, type CamerasConfig } from "./cameras/config.js";
 import { loadDotEnv } from "./env.js";
+import { loadHaConfig, type HaConfig } from "./ha/config.js";
 
 function env(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
@@ -27,6 +29,8 @@ export type AgentConfig = {
   syncIntervalMs: number;
   schedulerIntervalMs: number;
   timezone: string;
+  cameras: CamerasConfig;
+  ha: HaConfig;
 };
 
 export function loadConfig(cwd = process.cwd()): AgentConfig {
@@ -49,5 +53,7 @@ export function loadConfig(cwd = process.cwd()): AgentConfig {
     syncIntervalMs: Number(env("SYNC_INTERVAL_MS", "8000")),
     schedulerIntervalMs: Number(env("SCHEDULER_INTERVAL_MS", "5000")),
     timezone: env("TZ", "America/Argentina/Buenos_Aires"),
+    cameras: loadCamerasConfig(process.env, cwd),
+    ha: loadHaConfig(process.env),
   };
 }

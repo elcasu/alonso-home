@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ConnectSoloComoLaPi",
+      "Effect": "Allow",
+      "Action": "iot:Connect",
+      "Resource": "arn:aws:iot:__REGION__:__ACCOUNT__:client/__CLIENT_ID__"
+    },
+    {
+      "Sid": "PublicarSoloEventosDeCamara",
+      "Effect": "Allow",
+      "Action": "iot:Publish",
+      "Resource": "arn:aws:iot:__REGION__:__ACCOUNT__:topic/alonso/home/camera/*"
+    }
+  ]
+}

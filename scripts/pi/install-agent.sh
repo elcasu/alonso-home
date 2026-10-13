@@ -17,6 +17,8 @@ rsync -a --delete --exclude node_modules --exclude .next --exclude data --exclud
 
 cd "${DEST}"
 sudo -u "${RUN_USER}" bash -lc 'corepack enable && pnpm install && pnpm --filter @alonso/shared build && pnpm --filter @alonso/pi-agent build'
+chmod 755 "${DEST}/apps/pi-agent/dist/cli.js"
+ln -sfn "${DEST}/apps/pi-agent/dist/cli.js" /usr/local/bin/alonso
 
 install -d "${DEST}/apps/pi-agent/data"
 chown -R "${RUN_USER}:${RUN_USER}" "${DEST}"

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev --port 4074",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "tsx --conditions=import --test src/lib/*.test.ts"
   },
   "dependencies": {
     "@alonso/shared": "workspace:*",

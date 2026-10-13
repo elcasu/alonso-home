@@ -1,5 +1,6 @@
 import http from "node:http";
 import type { RuleAction } from "@alonso/shared";
+import type { CameraService } from "./cameras/index.js";
 import type { ZoneController } from "./controller.js";
 import type { AgentStore } from "./db.js";
 import { log, logError } from "./logger.js";
@@ -27,6 +28,7 @@ export function startLocalApi(
   store: AgentStore,
   controller: ZoneController,
   mqtt: MqttBridge,
+  cameras: CameraService | null = null,
 ): http.Server {
   const server = http.createServer(async (req, res) => {
     const host = req.headers.host ?? "";
@@ -45,6 +47,20 @@ export function startLocalApi(
         });
         return;
       }
+      if (req.method === "GET" && url.pathname === "/cameras") {
+        json(res, 200, cameras ? cameras.status() : { enabled: false });
+        return;
+      }
+      const snapMatch = url.pathname.match(/^\/cameras\/([^/]+)\/snapshot$/);
+      if (req.method === "POST" && snapMatch) {
+        if (!cameras) {
+          json(res, 404, { error: "cámaras desactivadas" });
+          return;
+        }
+        const result = await cameras.snapshotNow(decodeURIComponent(snapMatch[1]));
+        json(res, result.ok ? 200 : 502, result);
+        return;
+      }
       const zoneMatch = url.pathname.match(/^\/zones\/([^/]+)$/);
       if (req.method === "POST" && zoneMatch) {
         const body = JSON.parse((await readBody(req)) || "{}") as {
@@ -53,15 +69,17 @@ export function startLocalApi(
           durationMinutes?: number;
         };
         const zoneId = decodeURIComponent(zoneMatch[1]);
-        if (body.action) {
-          await controller.applyAction(
-            zoneId,
-            body.action,
-            body.durationMinutes,
-            "api local",
-          );
-        } else {
-          await controller.set(zoneId, Boolean(body.on), "api local");
+        const updated = body.action
+          ? await controller.applyAction(
+              zoneId,
+              body.action,
+              body.durationMinutes,
+              "api local",
+            )
+          : await controller.set(zoneId, Boolean(body.on), "api local");
+        if (!updated) {
+          json(res, 404, { error: "zona desconocida" });
+          return;
         }
         json(res, 200, { zones: store.getZones() });
         return;

@@ -38,3 +38,21 @@ CREATE TABLE IF NOT EXISTS events (
   message TEXT NOT NULL,
   zone_id TEXT
 );
+
+-- Módulo de cámaras (el panel también crea estas tablas solo al arrancar).
+CREATE TABLE IF NOT EXISTS camera_events (
+  id TEXT PRIMARY KEY,
+  camera_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  state TEXT NOT NULL,
+  ts TIMESTAMPTZ NOT NULL,
+  snapshot BYTEA
+);
+CREATE INDEX IF NOT EXISTS camera_events_ts_idx ON camera_events (ts DESC);
+CREATE INDEX IF NOT EXISTS camera_events_cam_ts_idx ON camera_events (camera_id, ts DESC);
+
+CREATE TABLE IF NOT EXISTS camera_status (
+  camera_id TEXT PRIMARY KEY,
+  online BOOLEAN NOT NULL,
+  last_seen TIMESTAMPTZ NOT NULL
+);

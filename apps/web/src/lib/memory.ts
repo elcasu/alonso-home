@@ -1,4 +1,5 @@
 import {
+  CAMERA_RETENTION_DAYS,
   COMMAND_TTL_MS,
   DEFAULT_ZONES,
   defaultSchedule,
@@ -6,7 +7,15 @@ import {
   type Schedule,
   type ZoneState,
 } from "@alonso/shared";
-import type { DataStore, HeartbeatRow, LogEvent } from "./store";
+import type {
+  CameraEventRow,
+  CameraStatusRow,
+  DataStore,
+  HeartbeatRow,
+  LogEvent,
+} from "./store";
+
+type MemoryCameraEvent = CameraEventRow & { snapshot?: Buffer };
 
 type MemoryState = {
   version: number;
@@ -15,9 +24,12 @@ type MemoryState = {
   commands: Command[];
   heartbeat: HeartbeatRow | null;
   events: LogEvent[];
+  cameraEvents: MemoryCameraEvent[];
+  cameraStatus: Map<string, CameraStatusRow>;
 };
 
-const SEED_VERSION = 2;
+const SEED_VERSION = 3;
+const MEMORY_CAMERA_EVENTS_MAX = 200;
 
 const globalForStore = globalThis as typeof globalThis & { __alonsoMemory?: MemoryState };
 
@@ -28,6 +40,8 @@ function seed(): MemoryState {
     schedule: defaultSchedule(),
     commands: [],
     heartbeat: null,
+    cameraEvents: [],
+    cameraStatus: new Map(),
     events: [
       {
         ts: new Date().toISOString(),
@@ -96,6 +110,56 @@ export function getMemoryStore(): DataStore {
     },
     async recentEvents(limit = 30) {
       return mem.events.slice(0, limit);
+    },
+    async saveCameraEvent(message) {
+      if (mem.cameraEvents.some((e) => e.id === message.id)) return false;
+      const row: MemoryCameraEvent = {
+        id: message.id,
+        cameraId: message.cameraId,
+        kind: message.kind,
+        state: message.state,
+        ts: new Date(message.ts).toISOString(),
+        hasSnapshot: Boolean(message.snapshot),
+        snapshot: message.snapshot ? Buffer.from(message.snapshot.b64, "base64") : undefined,
+      };
+      const cutoff = Date.now() - CAMERA_RETENTION_DAYS * 86_400_000;
+      mem.cameraEvents.push(row);
+      mem.cameraEvents = mem.cameraEvents
+        .filter((e) => Date.parse(e.ts) >= cutoff)
+        .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
+        .slice(0, MEMORY_CAMERA_EVENTS_MAX);
+      return true;
+    },
+    async saveCameraStatus(message) {
+      mem.cameraStatus.set(message.cameraId, {
+        cameraId: message.cameraId,
+        online: message.online,
+        lastSeen: new Date(message.ts).toISOString(),
+      });
+    },
+    async recentCameraEvents(limit, cameraId) {
+      return mem.cameraEvents
+        .filter((e) => !cameraId || e.cameraId === cameraId)
+        .slice(0, limit)
+        .map(({ snapshot: _snapshot, ...row }) => row);
+    },
+    async latestSnapshotEvents() {
+      const seen = new Set<string>();
+      const out: CameraEventRow[] = [];
+      for (const e of mem.cameraEvents) {
+        if (!e.hasSnapshot || seen.has(e.cameraId)) continue;
+        seen.add(e.cameraId);
+        const { snapshot: _snapshot, ...row } = e;
+        out.push(row);
+      }
+      return out;
+    },
+    async getCameraSnapshot(eventId) {
+      const found = mem.cameraEvents.find((e) => e.id === eventId);
+      return found?.snapshot ? { mime: "image/jpeg", data: found.snapshot } : null;
+    },
+    async getCameraStatuses() {
+      return [...mem.cameraStatus.values()];
     },
   };
 }

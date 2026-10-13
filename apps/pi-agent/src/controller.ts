@@ -8,6 +8,25 @@ import type { MqttBridge } from "./mqtt.js";
 
 export class ZoneController {
   private gpios = new Map<string, GpioHandle>();
+  private listeners = new Set<(zone: ZoneState) => void>();
+
+  /** Avisa cada vez que una zona cambia de estado, venga de donde venga (horario, nube, HA). */
+  onChange(listener: (zone: ZoneState) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(zone: ZoneState): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(zone);
+      } catch (err) {
+        logError("listener de zona", err);
+      }
+    }
+  }
 
   constructor(
     private store: AgentStore,
@@ -53,7 +72,9 @@ export class ZoneController {
       logError(`No pude cambiar ${zone.id}`, err);
       throw err;
     }
-    return this.store.getZones().find((item) => item.id === zoneId);
+    const updated = this.store.getZones().find((item) => item.id === zoneId);
+    if (updated) this.notify(updated);
+    return updated;
   }
 
   async applyAction(
@@ -61,12 +82,10 @@ export class ZoneController {
     action: RuleAction,
     durationMinutes: number | undefined,
     reason: string,
-  ): Promise<void> {
-    if (action === "off") {
-      await this.set(zoneId, false, reason);
-      return;
-    }
-    await this.set(zoneId, true, reason);
+  ): Promise<ZoneState | undefined> {
+    if (action === "off") return this.set(zoneId, false, reason);
+    const updated = await this.set(zoneId, true, reason);
+    if (!updated) return undefined;
     if (action === "pulse") {
       const minutes = durationMinutes && durationMinutes > 0 ? durationMinutes : 10;
       this.store.addPending({
@@ -77,6 +96,7 @@ export class ZoneController {
       });
       this.store.addEvent(`Pulse ${minutes} min en ${zoneId}`, zoneId);
     }
+    return updated;
   }
 
   async applyCommand(command: Command): Promise<void> {

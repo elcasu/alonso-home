@@ -15,9 +15,26 @@ apps/web/.vercel
 .DS_Store
 *.db
 *.db-journal
+*.tsbuildinfo
 .vercel
 .pnpm-store
 .vscode/c_cpp_properties.json
 deploy/cameras/.env
 deploy/cameras/data
 deploy/cameras/config/config.yml
+
+# Home Assistant / Tuya: claves locales, secretos de la API y datos de HA
+deploy/homeassistant/secrets
+deploy/homeassistant/.env
+deploy/homeassistant/ha-config/*
+!deploy/homeassistant/ha-config/configuration.yaml
+!deploy/homeassistant/ha-config/packages/
+deploy/homeassistant/mosquitto/config/passwords
+devices.json
+snapshot.json
+tinytuya.json
+tuya-raw.json
+
+# Certificados de AWS IoT (claves privadas)
+apps/pi-agent/certs
+deploy/aws-iot/out

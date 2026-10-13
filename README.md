@@ -108,8 +108,68 @@ GND común de control ≠ tierra de potencia mal atada: unificá GND de 5 V y Pi
 
 Arranque: todas las luces OFF. Watchdog de systemd ya está en la unidad. En `/salud` del panel, si la Pi no reporta aparece la alerta. Ajustá jitter y horarios reales en **Agenda**.
 
+## Fase 5 — cámaras
+
+Las cámaras Xiongmai/iCSee (GeoTek) se leen desde la Pi, sin IP pública ni nube del fabricante:
+
+```
+cámara ──ONVIF PullPoint :8899──▶ agente Pi ──DVRIP :34567 (foto)──▶ outbox SQLite
+                                                                         │
+                          AWS IoT Core (MQTT 8883, X.509) ◀──────────────┘
+                                   │  Regla IoT → HTTP
+                                   ▼
+                      panel /api/device/camera-events ──▶ /camaras
+```
+
+- **Eventos**: `motion`, `tamper` y `snapshot` (`start` / `end` / `instant`). Cada evento de movimiento adjunta una foto (~25 KB, base64 en el mensaje).
+- **Tópicos**: `alonso/home/camera/{id}/event` y `.../status` (QoS 1). Otras apps pueden suscribirse a `alonso/home/camera/#`.
+- **Configuración**: variable `CAMERAS` (JSON) y `IOT_*` en el `.env` de la Pi (ver `apps/pi-agent/.env.example`). Sin `CAMERAS` el módulo no arranca.
+- **Sin conexión**: los eventos quedan en el outbox (6 h / 300 filas) y se reenvían al volver la red.
+- **AWS**: `deploy/aws-iot/setup.sh` crea thing, política mínima, certificado y regla IoT hacia el panel; escribe `deploy/aws-iot/out/env.snippet`. Los certificados van en `apps/pi-agent/certs` (ignorado por git).
+- **Panel**: tablas `camera_events` / `camera_status` en `deploy/postgres/schema.sql` (retención 14 días).
+- **API local de la Pi** (solo localhost): `GET /cameras`, `POST /cameras/:id/snapshot`.
+- **Tests**: `pnpm test` en la raíz. El test de Postgres requiere `TEST_DATABASE_URL`.
+- Cámaras con firmware distinto a V5.01.C01.000929QB pueden comportarse distinto (ver notas en `apps/pi-agent/src/cameras/onvif.ts`).
+
+## Entrar desde afuera
+
+El 4G sale por CGNAT: la Pi abre un túnel Tailscale y no publica puertos. Desde el celular, con datos, `ssh alonso-pi`. En esa sesión, `alonso` habla con la API de `127.0.0.1` y muestra el resultado en texto.
+
+Checklist en la casa:
+
+1. **4G.** `sudo bash scripts/pi/setup-4g.sh <apn>` (si el stick es el ZTE: `sudo bash scripts/pi/setup-4g-zte.sh`). `ping -c 3 1.1.1.1`.
+2. **Tailscale.** Auth key de un solo uso, no efímera:
+
+```bash
+export TAILSCALE_AUTH_KEY='tskey-auth-...'
+sudo --preserve-env=TAILSCALE_AUTH_KEY bash scripts/pi/setup-tailscale.sh
+```
+
+En la consola de Tailscale, aprobá la ruta `192.168.4.0/24` y desactivá el vencimiento de la key de `alonso-pi`.
+
+3. **Agente y CLI.** `sudo bash scripts/pi/install-agent.sh`. Deja `alonso` en el PATH.
+
+Prueba con el celular en datos y el Wi‑Fi de la casa apagado:
+
+- `ssh alonso-pi` entra.
+- `alonso status` lista las zonas.
+- `alonso on living` y `alonso off living` cambian la línea. Si el GPIO es real, la luz acompaña.
+- `sudo reboot`. Cuando vuelva el 4G, repetí el SSH y `alonso status`.
+
+Si al reiniciar no vuelve: el perfil 4G tiene que tener autoconnect, y `systemctl is-enabled tailscaled` tiene que decir `enabled`.
+
+```bash
+alonso status
+alonso on living
+alonso off living
+alonso pulse bathroom 10
+alonso cameras
+alonso snap entrada
+```
+
 ## Seguridad
 
+- Las cámaras tienen ONVIF sin autenticación y admin sin contraseña: asignales una clave y dejalas solo en la LAN.
 - La Pi no publica puertos a internet.
 - Mosquitto solo en `127.0.0.1` y `192.168.4.1`.
 - Comandos idempotentes (`on` / `off` / `pulse`), TTL 2 min.

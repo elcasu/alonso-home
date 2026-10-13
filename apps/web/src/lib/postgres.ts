@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import {
+  CAMERA_RETENTION_DAYS,
   COMMAND_TTL_MS,
   DEFAULT_ZONES,
   defaultSchedule,
@@ -7,7 +8,7 @@ import {
   type Schedule,
   type ZoneState,
 } from "@alonso/shared";
-import type { DataStore, HeartbeatRow, LogEvent } from "./store";
+import type { CameraEventRow, DataStore, HeartbeatRow, LogEvent } from "./store";
 
 type Sql = ReturnType<typeof postgres>;
 
@@ -70,6 +71,23 @@ async function ensure(sql: Sql): Promise<void> {
       ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       message TEXT NOT NULL,
       zone_id TEXT
+    )`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS camera_events (
+      id TEXT PRIMARY KEY,
+      camera_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      state TEXT NOT NULL,
+      ts TIMESTAMPTZ NOT NULL,
+      snapshot BYTEA
+    )`;
+  await sql`CREATE INDEX IF NOT EXISTS camera_events_ts_idx ON camera_events (ts DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS camera_events_cam_ts_idx ON camera_events (camera_id, ts DESC)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS camera_status (
+      camera_id TEXT PRIMARY KEY,
+      online BOOLEAN NOT NULL,
+      last_seen TIMESTAMPTZ NOT NULL
     )`;
 
   const [{ n }] = await sql<{ n: number }[]>`SELECT COUNT(*)::int AS n FROM zones`;
@@ -238,5 +256,80 @@ export function getPostgresStore(): DataStore {
         zoneId: row.zone_id,
       }));
     },
+    async saveCameraEvent(message) {
+      await ready(sql);
+      const snapshot = message.snapshot ? Buffer.from(message.snapshot.b64, "base64") : null;
+      const inserted = await sql<{ id: string }[]>`
+        INSERT INTO camera_events (id, camera_id, kind, state, ts, snapshot)
+        VALUES (${message.id}, ${message.cameraId}, ${message.kind}, ${message.state}, ${message.ts}, ${snapshot})
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id`;
+      if (inserted.length > 0) {
+        await sql`DELETE FROM camera_events WHERE ts < NOW() - make_interval(days => ${CAMERA_RETENTION_DAYS})`;
+      }
+      return inserted.length > 0;
+    },
+    async saveCameraStatus(message) {
+      await ready(sql);
+      await sql`
+        INSERT INTO camera_status (camera_id, online, last_seen)
+        VALUES (${message.cameraId}, ${message.online}, ${message.ts})
+        ON CONFLICT (camera_id) DO UPDATE SET online = EXCLUDED.online, last_seen = EXCLUDED.last_seen`;
+    },
+    async recentCameraEvents(limit, cameraId) {
+      await ready(sql);
+      const rows = await sql<CameraEventDbRow[]>`
+        SELECT id, camera_id, kind, state, ts, (snapshot IS NOT NULL) AS has_snapshot
+        FROM camera_events
+        WHERE (${cameraId ?? null}::text IS NULL OR camera_id = ${cameraId ?? null})
+        ORDER BY ts DESC LIMIT ${limit}`;
+      return rows.map(toCameraEvent);
+    },
+    async latestSnapshotEvents() {
+      await ready(sql);
+      const rows = await sql<CameraEventDbRow[]>`
+        SELECT DISTINCT ON (camera_id) id, camera_id, kind, state, ts, TRUE AS has_snapshot
+        FROM camera_events
+        WHERE snapshot IS NOT NULL
+        ORDER BY camera_id, ts DESC`;
+      return rows.map(toCameraEvent);
+    },
+    async getCameraSnapshot(eventId) {
+      await ready(sql);
+      const rows = await sql<{ snapshot: Buffer | null }[]>`
+        SELECT snapshot FROM camera_events WHERE id = ${eventId}`;
+      const data = rows[0]?.snapshot;
+      return data ? { mime: "image/jpeg", data: Buffer.from(data) } : null;
+    },
+    async getCameraStatuses() {
+      await ready(sql);
+      const rows = await sql<{ camera_id: string; online: boolean; last_seen: Date }[]>`
+        SELECT camera_id, online, last_seen FROM camera_status`;
+      return rows.map((row) => ({
+        cameraId: row.camera_id,
+        online: row.online,
+        lastSeen: row.last_seen.toISOString(),
+      }));
+    },
+  };
+}
+
+type CameraEventDbRow = {
+  id: string;
+  camera_id: string;
+  kind: CameraEventRow["kind"];
+  state: CameraEventRow["state"];
+  ts: Date;
+  has_snapshot: boolean;
+};
+
+function toCameraEvent(row: CameraEventDbRow): CameraEventRow {
+  return {
+    id: row.id,
+    cameraId: row.camera_id,
+    kind: row.kind,
+    state: row.state,
+    ts: row.ts.toISOString(),
+    hasSnapshot: row.has_snapshot,
   };
 }

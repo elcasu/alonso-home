@@ -2,6 +2,8 @@ import { loadConfig } from "./config.js";
 import { ZoneController } from "./controller.js";
 import { openStore } from "./db.js";
 import { startLocalApi } from "./api.js";
+import { startCameras } from "./cameras/index.js";
+import { startHomeAssistant } from "./ha/index.js";
 import { log, logError } from "./logger.js";
 import { connectMqtt } from "./mqtt.js";
 import { notifyReady, notifyWatchdog } from "./notify.js";
@@ -24,12 +26,15 @@ async function main(): Promise<void> {
   });
   const controller = new ZoneController(store, mqtt, config.gpioMock, config.gpioActiveLow);
   await controller.init();
+  // Después de init(): así los estados iniciales que se publican ya son los reales.
+  const ha = startHomeAssistant(config, store, controller);
 
   const scheduler = createScheduler(store, controller, config.schedulerIntervalMs);
   scheduler.start();
   const sync = createSyncLoop(config, store, controller, mqtt);
   sync.start();
-  const api = startLocalApi(config.localApiPort, store, controller, mqtt);
+  const cameras = startCameras(config, store);
+  const api = startLocalApi(config.localApiPort, store, controller, mqtt, cameras);
 
   notifyReady();
   const watchdog = setInterval(() => notifyWatchdog(), 10_000);
@@ -40,6 +45,8 @@ async function main(): Promise<void> {
     scheduler.stop();
     sync.stop();
     api.close();
+    await cameras?.stop();
+    await ha?.stop();
     await controller.close();
     await mqtt.close();
     store.close();

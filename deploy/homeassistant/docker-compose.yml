@@ -1,0 +1,28 @@
+# Home Assistant + Mosquitto de alonso-home. Separado del PoC de voz (alonso-ha-poc, :8123).
+name: alonso-home-ha
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+
+  homeassistant:
+    # Versión fija: tuya-local pide HA >= 2026.8. No usar :stable para no mover el PoC de voz.
+    image: ghcr.io/home-assistant/home-assistant:2026.10.1
+    restart: unless-stopped
+    ports:
+      - "${HA_PORT:-8124}:8123"
+    environment:
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+    volumes:
+      - ./ha-config:/config
+    depends_on:
+      - mosquitto
+
+volumes:
+  mosquitto_data:

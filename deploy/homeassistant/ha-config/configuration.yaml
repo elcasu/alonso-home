@@ -1,0 +1,20 @@
+# Home Assistant de alonso-home (luces, riego, cámaras).
+# Las entidades llegan por MQTT Discovery; acá solo va lo base.
+
+default_config:
+
+homeassistant:
+  name: Alonso Home
+  latitude: -34.6037
+  longitude: -58.3816
+  elevation: 25
+  unit_system: metric
+  time_zone: America/Argentina/Buenos_Aires
+  country: AR
+  language: es
+  packages: !include_dir_named packages
+
+logger:
+  default: info
+  logs:
+    custom_components.tuya_local: info
