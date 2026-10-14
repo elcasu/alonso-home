@@ -122,13 +122,28 @@ claim_wifi_for_nm() {
     systemctl stop dnsmasq || true
   fi
 
+  # Si wlan0 figura en interfaces(d), NM lo deja "strictly unmanaged"
+  # (ifupdown managed=false). En esta Pi suele existir interfaces.d/wlan0.
   local f
-  for f in /etc/network/interfaces.d/alonso-ap /etc/network/interfaces.d/alonso-ap.bak*; do
+  for f in /etc/network/interfaces.d/alonso-ap \
+           /etc/network/interfaces.d/alonso-ap.bak* \
+           /etc/network/interfaces.d/wlan0 \
+           /etc/network/interfaces.d/wlan0.bak*; do
     [[ -e "${f}" ]] || continue
-    info "Aparto ${f} (config del AP viejo)."
+    info "Aparto ${f} (ifupdown / AP viejo)."
     mv -f "${f}" "${f}.disabled.$(date +%Y%m%d%H%M%S)" 2>/dev/null \
       || rm -f "${f}"
   done
+  if [[ -f /etc/network/interfaces ]] && grep -qE '^[[:space:]]*(auto|iface)[[:space:]]+wlan0' /etc/network/interfaces; then
+    info "Comento wlan0 en /etc/network/interfaces."
+    cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%Y%m%d%H%M%S)"
+    sed -i -E '/^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+wlan0/,/^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+/ {
+      /^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+wlan0/s/^/# alonso: /
+      /^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+wlan0/b
+      /^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+/b
+      s/^/# alonso: /
+    }' /etc/network/interfaces
+  fi
 
   # Forzar managed=true (pisa "strictly unmanaged" de nmcli dev set managed no).
   install -d /etc/NetworkManager/conf.d
