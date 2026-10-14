@@ -110,20 +110,51 @@ cancel_rollback_mark_ok() {
   info "Éxito marcado; el rollback no tocará el Wi‑Fi."
 }
 
-stop_ap_if_any() {
+claim_wifi_for_nm() {
+  # setup-ap.sh deja wlan0 "unmanaged" + IP estática en interfaces.d → NM no puede conectar.
   if systemctl is-active --quiet hostapd 2>/dev/null; then
     info "Apago hostapd (AP en ${WIFI_IFACE}) para usar el Wi‑Fi como cliente."
     systemctl stop hostapd || true
     systemctl disable hostapd || true
   fi
-  if systemctl is-active --quiet dnsmasq 2>/dev/null; then
-    # Solo si el AP de Alonso lo usa; no tocamos si hay otro dueño claro.
-    if [[ -f /etc/dnsmasq.d/alonso.conf ]]; then
-      info "Apago dnsmasq del AP Alonso."
-      systemctl stop dnsmasq || true
-    fi
+  if systemctl is-active --quiet dnsmasq 2>/dev/null && [[ -f /etc/dnsmasq.d/alonso.conf ]]; then
+    info "Apago dnsmasq del AP Alonso."
+    systemctl stop dnsmasq || true
   fi
-  nmcli dev set "${WIFI_IFACE}" managed yes 2>/dev/null || true
+
+  if [[ -f /etc/network/interfaces.d/alonso-ap ]]; then
+    info "Quito la IP estática del AP (/etc/network/interfaces.d/alonso-ap)."
+    mv -f /etc/network/interfaces.d/alonso-ap \
+      "/etc/network/interfaces.d/alonso-ap.bak.$(date +%Y%m%d%H%M%S)"
+  fi
+
+  # Por si quedó en conf.d (algunas imágenes lo escriben).
+  local conf
+  for conf in /etc/NetworkManager/conf.d/*.conf; do
+    [[ -f "${conf}" ]] || continue
+    if grep -q "interface-name:${WIFI_IFACE}" "${conf}" 2>/dev/null; then
+      info "Saco ${WIFI_IFACE} de unmanaged en ${conf}."
+      sed -i.bak "/interface-name:${WIFI_IFACE}/d" "${conf}"
+    fi
+  done
+
+  ip addr flush dev "${WIFI_IFACE}" 2>/dev/null || true
+  ip link set "${WIFI_IFACE}" down 2>/dev/null || true
+  nmcli dev set "${WIFI_IFACE}" managed yes || true
+
+  # "strictly unmanaged" suele quedar hasta recargar NM (interfaces.d / conf.d).
+  if nmcli -t -f DEVICE,STATE device | grep -q "^${WIFI_IFACE}:unmanaged$"; then
+    info "Recargo NetworkManager para tomar ${WIFI_IFACE}."
+    systemctl restart NetworkManager
+    sleep 3
+    nmcli dev set "${WIFI_IFACE}" managed yes || true
+  fi
+
+  if nmcli -t -f DEVICE,STATE device | grep -q "^${WIFI_IFACE}:unmanaged$"; then
+    die "${WIFI_IFACE} sigue unmanaged. Revisá: nmcli device status; ls /etc/network/interfaces.d/"
+  fi
+  info "${WIFI_IFACE} gestionado por NetworkManager."
+  ip link set "${WIFI_IFACE}" up || true
 }
 
 probe_zte() {
@@ -249,6 +280,9 @@ main() {
 
   [[ -n "${WIFI_SSID}" ]] || die "Definí WIFI_SSID"
   [[ -n "${WIFI_PASSWORD}" ]] || die "Definí WIFI_PASSWORD"
+  if [[ "${WIFI_SSID}" == "el-nombre-exacto-del-wifi" ]]; then
+    die "WIFI_SSID sigue siendo el placeholder. Poné el SSID real de la casa."
+  fi
 
   info "Estado actual:"
   ip -br addr
@@ -260,7 +294,7 @@ main() {
   tailscale_ok || die "Tailscale no responde. Arreglá el túnel antes de tocar la red."
 
   schedule_rollback
-  stop_ap_if_any
+  claim_wifi_for_nm
 
   local modem_cidr="" modem_prefix="" modem_gw=""
   if ip -br link show "${MODEM_IFACE}" >/dev/null 2>&1; then
