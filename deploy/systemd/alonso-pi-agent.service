@@ -5,6 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=notify
+# systemd-notify corre como hijo; sin esto el READY no cuenta y el servicio queda en activating.
+NotifyAccess=all
 WorkingDirectory=/opt/alonso-home/apps/pi-agent
 EnvironmentFile=-/opt/alonso-home/apps/pi-agent/.env
 ExecStart=/usr/bin/node dist/index.js

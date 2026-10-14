@@ -102,20 +102,20 @@ describe("formato", () => {
   });
 });
 
-function fakeFetch(
-  handler: (url: string, init?: RequestInit) => { status: number; body: unknown } | Promise<never>,
-): typeof fetch {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const result = await handler(String(input), init);
-    return new Response(JSON.stringify(result.body), { status: result.status });
-  }) as typeof fetch;
+function fakeRequest(
+  handler: (url: string, init?: { method?: string; body?: string }) => {
+    status: number;
+    body: unknown;
+  },
+) {
+  return async (url: string, init?: { method?: string; body?: string }) => handler(url, init);
 }
 
 describe("runCli", () => {
   it("imprime el estado que devuelve el agente", async () => {
     const result = await runCli(["status"], {
       env: {},
-      fetch: fakeFetch(() => ({
+      request: fakeRequest(() => ({
         status: 200,
         body: {
           zones: [{ id: "living", on: true, kind: "gpio" }],
@@ -130,7 +130,7 @@ describe("runCli", () => {
 
   it("prende una zona gpio y publica una esp32", async () => {
     const calls: { url: string; body: string }[] = [];
-    const fetchImpl = fakeFetch((url, init) => {
+    const request = fakeRequest((url, init) => {
       calls.push({ url, body: String(init?.body ?? "") });
       const id = url.endsWith("/bathroom") ? "bathroom" : "living";
       const kind = id === "bathroom" ? "esp32" : "gpio";
@@ -139,11 +139,8 @@ describe("runCli", () => {
         body: { zones: [{ id, on: true, kind }] },
       };
     });
-    const on = await runCli(["on", "living"], { env: { LOCAL_API_PORT: "3001" }, fetch: fetchImpl });
-    const pulse = await runCli(["pulse", "bathroom", "10"], {
-      env: {},
-      fetch: fetchImpl,
-    });
+    const on = await runCli(["on", "living"], { env: { LOCAL_API_PORT: "3001" }, request });
+    const pulse = await runCli(["pulse", "bathroom", "10"], { env: {}, request });
     assert.equal(on.stdout, "living ON");
     assert.equal(on.code, 0);
     assert.equal(pulse.stdout, "bathroom ON publicado pulse 10 min");
@@ -155,11 +152,11 @@ describe("runCli", () => {
   it("muestra el error de una zona o cámara que no existe", async () => {
     const missing = await runCli(["on", "azotea"], {
       env: {},
-      fetch: fakeFetch(() => ({ status: 404, body: { error: "zona desconocida" } })),
+      request: fakeRequest(() => ({ status: 404, body: { error: "zona desconocida" } })),
     });
     const snap = await runCli(["snap", "entrada"], {
       env: {},
-      fetch: fakeFetch(() => ({
+      request: fakeRequest(() => ({
         status: 502,
         body: { ok: false, error: "cámara desconocida: entrada" },
       })),
@@ -173,9 +170,10 @@ describe("runCli", () => {
   it("avisa si el agente no escucha", async () => {
     const result = await runCli(["status"], {
       env: {},
-      fetch: (async () => {
-        throw new Error("connect ECONNREFUSED");
-      }) as typeof fetch,
+      request: async () => ({
+        status: 0,
+        body: { error: "no pude hablar con el agente en 127.0.0.1:3001: connect ECONNREFUSED" },
+      }),
     });
     assert.equal(result.code, 1);
     assert.match(result.stderr, /no pude hablar con el agente en 127\.0\.0\.1:3001/);

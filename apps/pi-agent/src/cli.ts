@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import http from "node:http";
 import { pathToFileURL } from "node:url";
 
 export const USAGE =
@@ -33,9 +34,18 @@ export type CamerasBody = {
 
 export type SnapBody = { ok?: boolean; bytes?: number; error?: string };
 
+export type HttpInit = {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+};
+
+export type HttpResult = { status: number; body: unknown };
+
 type CliIo = {
-  fetch: typeof fetch;
   env: NodeJS.ProcessEnv;
+  /** Inyectable en tests. Por defecto usa node:http (no pasa por HTTP_PROXY). */
+  request?: (url: string, init?: HttpInit) => Promise<HttpResult>;
 };
 
 type CliResult = { code: number; stdout: string; stderr: string };
@@ -132,25 +142,48 @@ function apiPort(env: NodeJS.ProcessEnv): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 3001;
 }
 
-async function request(
-  io: CliIo,
-  path: string,
-  init?: RequestInit,
-): Promise<{ status: number; body: unknown }> {
-  const port = apiPort(io.env);
-  let response: Response;
-  try {
-    response = await io.fetch(`http://127.0.0.1:${port}${path}`, init);
-  } catch {
-    return { status: 0, body: { error: `no pude hablar con el agente en 127.0.0.1:${port}` } };
-  }
-  const text = await response.text();
-  if (!text) return { status: response.status, body: {} };
-  try {
-    return { status: response.status, body: JSON.parse(text) as unknown };
-  } catch {
-    return { status: response.status, body: { error: text } };
-  }
+/** HTTP directo a loopback: no usa HTTP_PROXY (fetch/undici sí, y rompe el CLI por SSH). */
+export function httpRequest(url: string, init: HttpInit = {}): Promise<HttpResult> {
+  return new Promise((resolve) => {
+    const parsed = new URL(url);
+    const req = http.request(
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port,
+        path: `${parsed.pathname}${parsed.search}`,
+        method: init.method ?? "GET",
+        headers: init.headers,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(chunk as Buffer));
+        res.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          if (!text) {
+            resolve({ status: res.statusCode ?? 0, body: {} });
+            return;
+          }
+          try {
+            resolve({ status: res.statusCode ?? 0, body: JSON.parse(text) as unknown });
+          } catch {
+            resolve({ status: res.statusCode ?? 0, body: { error: text } });
+          }
+        });
+      },
+    );
+    req.setTimeout(8_000, () => {
+      req.destroy(new Error("timeout"));
+    });
+    req.on("error", (err) => {
+      resolve({
+        status: 0,
+        body: { error: `no pude hablar con el agente en ${parsed.host}: ${err.message}` },
+      });
+    });
+    if (init.body) req.write(init.body);
+    req.end();
+  });
 }
 
 function fail(text: string): CliResult {
@@ -161,22 +194,25 @@ export async function runCli(argv: string[], io: CliIo): Promise<CliResult> {
   const parsed = parseArgs(argv);
   if ("error" in parsed) return fail(parsed.error);
 
+  const port = apiPort(io.env);
+  const base = `http://127.0.0.1:${port}`;
+  const doRequest = io.request ?? httpRequest;
+
   if (parsed.kind === "status") {
-    const { status, body } = await request(io, "/status");
+    const { status, body } = await doRequest(`${base}/status`);
     if (status !== 200) return fail(errorText(body, "no pude leer el estado"));
     return { code: 0, stdout: formatStatus(body as StatusBody), stderr: "" };
   }
 
   if (parsed.kind === "cameras") {
-    const { status, body } = await request(io, "/cameras");
+    const { status, body } = await doRequest(`${base}/cameras`);
     if (status !== 200) return fail(errorText(body, "no pude leer las cámaras"));
     return { code: 0, stdout: formatCameras(body as CamerasBody), stderr: "" };
   }
 
   if (parsed.kind === "snap") {
-    const { status, body } = await request(
-      io,
-      `/cameras/${encodeURIComponent(parsed.cameraId)}/snapshot`,
+    const { status, body } = await doRequest(
+      `${base}/cameras/${encodeURIComponent(parsed.cameraId)}/snapshot`,
       { method: "POST" },
     );
     const snap = formatSnap(parsed.cameraId, (body ?? {}) as SnapBody);
@@ -188,7 +224,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<CliResult> {
     parsed.kind === "pulse"
       ? { action: "pulse", durationMinutes: parsed.minutes }
       : { on: parsed.action === "on" };
-  const { status, body } = await request(io, `/zones/${encodeURIComponent(parsed.zoneId)}`, {
+  const { status, body } = await doRequest(`${base}/zones/${encodeURIComponent(parsed.zoneId)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
@@ -215,7 +251,7 @@ function invokedDirectly(): boolean {
 }
 
 if (invokedDirectly()) {
-  runCli(process.argv.slice(2), { fetch, env: process.env }).then((result) => {
+  runCli(process.argv.slice(2), { env: process.env }).then((result) => {
     if (result.stdout) process.stdout.write(`${result.stdout}\n`);
     if (result.stderr) process.stderr.write(`${result.stderr}\n`);
     process.exit(result.code);
