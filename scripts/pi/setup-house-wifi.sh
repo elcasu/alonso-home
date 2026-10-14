@@ -122,36 +122,49 @@ claim_wifi_for_nm() {
     systemctl stop dnsmasq || true
   fi
 
-  if [[ -f /etc/network/interfaces.d/alonso-ap ]]; then
-    info "Quito la IP estática del AP (/etc/network/interfaces.d/alonso-ap)."
-    mv -f /etc/network/interfaces.d/alonso-ap \
-      "/etc/network/interfaces.d/alonso-ap.bak.$(date +%Y%m%d%H%M%S)"
-  fi
+  local f
+  for f in /etc/network/interfaces.d/alonso-ap /etc/network/interfaces.d/alonso-ap.bak*; do
+    [[ -e "${f}" ]] || continue
+    info "Aparto ${f} (config del AP viejo)."
+    mv -f "${f}" "${f}.disabled.$(date +%Y%m%d%H%M%S)" 2>/dev/null \
+      || rm -f "${f}"
+  done
 
-  # Por si quedó en conf.d (algunas imágenes lo escriben).
+  # Forzar managed=true (pisa "strictly unmanaged" de nmcli dev set managed no).
+  install -d /etc/NetworkManager/conf.d
+  cat >/etc/NetworkManager/conf.d/99-alonso-manage-wlan0.conf <<EOF
+[device]
+match-device=interface-name:${WIFI_IFACE}
+managed=true
+EOF
+  info "Escribí /etc/NetworkManager/conf.d/99-alonso-manage-wlan0.conf"
+
+  # Quitar wlan0 de listas unmanaged-* si aparece.
   local conf
-  for conf in /etc/NetworkManager/conf.d/*.conf; do
+  for conf in /etc/NetworkManager/NetworkManager.conf /etc/NetworkManager/conf.d/*.conf; do
     [[ -f "${conf}" ]] || continue
+    [[ "${conf}" == *99-alonso-manage-wlan0.conf ]] && continue
     if grep -q "interface-name:${WIFI_IFACE}" "${conf}" 2>/dev/null; then
-      info "Saco ${WIFI_IFACE} de unmanaged en ${conf}."
+      info "Limpio mención a ${WIFI_IFACE} en ${conf}."
       sed -i.bak "/interface-name:${WIFI_IFACE}/d" "${conf}"
     fi
   done
 
   ip addr flush dev "${WIFI_IFACE}" 2>/dev/null || true
   ip link set "${WIFI_IFACE}" down 2>/dev/null || true
+
+  info "Reinicio NetworkManager para tomar ${WIFI_IFACE}."
+  systemctl restart NetworkManager
+  sleep 3
   nmcli dev set "${WIFI_IFACE}" managed yes || true
-
-  # "strictly unmanaged" suele quedar hasta recargar NM (interfaces.d / conf.d).
-  if nmcli -t -f DEVICE,STATE device | grep -q "^${WIFI_IFACE}:unmanaged$"; then
-    info "Recargo NetworkManager para tomar ${WIFI_IFACE}."
-    systemctl restart NetworkManager
-    sleep 3
-    nmcli dev set "${WIFI_IFACE}" managed yes || true
-  fi
+  sleep 1
 
   if nmcli -t -f DEVICE,STATE device | grep -q "^${WIFI_IFACE}:unmanaged$"; then
-    die "${WIFI_IFACE} sigue unmanaged. Revisá: nmcli device status; ls /etc/network/interfaces.d/"
+    echo "--- diagnóstico ---" >&2
+    nmcli device status >&2 || true
+    ls -la /etc/network/interfaces.d/ >&2 || true
+    grep -rni "wlan0\|unmanaged" /etc/NetworkManager/ /etc/network/interfaces /etc/network/interfaces.d/ 2>/dev/null >&2 || true
+    die "${WIFI_IFACE} sigue unmanaged."
   fi
   info "${WIFI_IFACE} gestionado por NetworkManager."
   ip link set "${WIFI_IFACE}" up || true
@@ -280,9 +293,11 @@ main() {
 
   [[ -n "${WIFI_SSID}" ]] || die "Definí WIFI_SSID"
   [[ -n "${WIFI_PASSWORD}" ]] || die "Definí WIFI_PASSWORD"
-  if [[ "${WIFI_SSID}" == "el-nombre-exacto-del-wifi" ]]; then
-    die "WIFI_SSID sigue siendo el placeholder. Poné el SSID real de la casa."
-  fi
+  case "${WIFI_SSID}" in
+    el-nombre-exacto-del-wifi|SSID-real-de-la-casa|changeme|tu-ssid)
+      die "WIFI_SSID es un placeholder. Poné el nombre real de la red (el que ves en el celular)."
+      ;;
+  esac
 
   info "Estado actual:"
   ip -br addr

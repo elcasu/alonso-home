@@ -37,6 +37,7 @@ nmcli connection add type ethernet ifname "${IFACE}" con-name "${CON_NAME}" \
   ipv4.route-metric "${METRIC}" \
   ipv4.never-default no \
   ipv4.ignore-auto-dns yes \
+  ipv4.dns "1.1.1.1,8.8.8.8" \
   ipv6.method ignore \
   connection.autoconnect yes \
   connection.autoconnect-retries 0
